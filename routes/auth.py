@@ -83,8 +83,6 @@ def login():
             
             if not email or not password:
                 flash("Email and password are required", "error")
-                if origin == "employer":
-                    return render_template("employer/login.html")
                 return render_template("auth/login.html")
             
             profile = authenticate_staff(email, password)
@@ -120,8 +118,7 @@ def login():
                     return redirect(url_for("main.index"))
             
             flash("Invalid email or password", "error")
-            if origin == "employer":
-                return render_template("employer/login.html")
+            return render_template("auth/login.html")
             
         elif login_type == "student":
             admission_no = request.form.get("admission_no", "").strip()
