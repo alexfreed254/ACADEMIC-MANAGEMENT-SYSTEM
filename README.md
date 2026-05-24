@@ -130,3 +130,4 @@ gunicorn app:app
 - JWT tokens are refreshed automatically before expiry
 - File uploads are stored in Supabase Storage with public access policies
 # ACADEMIC-MANAGEMENT-SYSTEM
+# ACADEMIC-MANAGEMENT-SYSTEM
