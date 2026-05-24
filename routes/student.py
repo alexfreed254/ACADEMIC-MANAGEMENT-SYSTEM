@@ -212,10 +212,7 @@ def profile():
                 return redirect(url_for("student.profile"))
             
             try:
-                # Upload to Supabase Storage
-                from supabase import create_client
-                import os
-                
+                # Upload to Supabase Storage using service client
                 ext = file.filename.rsplit('.', 1)[1].lower()
                 filename = f"passports/{student_id}_{uuid.uuid4().hex}.{ext}"
                 
@@ -781,28 +778,24 @@ def upload_document():
         return redirect(url_for("student.portfolio"))
     
     try:
-        # Upload file to Supabase Storage
+        # Upload file to Supabase Storage — use service client directly
         import uuid
         file_extension = file.filename.split('.')[-1]
         unique_filename = f"{uuid.uuid4()}.{file_extension}"
         storage_path = f"trainee_documents/{user['id']}/{unique_filename}"
-        
-        # Upload to storage bucket
-        from supabase import create_client
-        storage = create_client(
-            os.getenv("SUPABASE_URL"),
-            os.getenv("SUPABASE_KEY")
-        )
-        
-        storage.storage.from_("documents").upload(
+
+        file_data = file.read()
+        svc = get_service_client()
+        svc.storage.from_("documents").upload(
             path=storage_path,
-            file=file.read(),
+            file=file_data,
             file_options={"content-type": file.content_type}
         )
-        
+
         # Get public URL
-        file_url = f"{os.getenv('SUPABASE_URL')}/storage/v1/object/public/documents/{storage_path}"
-        
+        import os
+        file_url = f"{os.environ.get('SUPABASE_URL','').strip()}/storage/v1/object/public/documents/{storage_path}"
+
         # Save document record
         db.table("trainee_documents").insert({
             "student_id": user["id"],
@@ -811,7 +804,7 @@ def upload_document():
             "document_name": document_name,
             "file_url": file_url,
             "file_name": file.filename,
-            "file_size": len(file.read()) if file else 0,
+            "file_size": len(file_data),
             "file_type": file.content_type,
             "description": description,
             "academic_year": int(academic_year),
@@ -840,14 +833,10 @@ def delete_document(document_id):
         if not document or document["student_id"] != user["id"]:
             abort(403)
         
-        # Delete from storage
+        # Delete from storage — use service client directly
         storage_path = document["file_url"].split("documents/")[-1]
-        from supabase import create_client
-        storage = create_client(
-            os.getenv("SUPABASE_URL"),
-            os.getenv("SUPABASE_KEY")
-        )
-        storage.storage.from_("documents").remove([storage_path])
+        svc = get_service_client()
+        svc.storage.from_("documents").remove([storage_path])
         
         # Delete record
         db.table("trainee_documents").delete().eq("id", document_id).execute()

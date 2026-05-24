@@ -21,6 +21,64 @@ def _svc():
     return get_service_client()
 
 
+# ── One-time setup: seed super_admin user_profiles row ───────────────────────
+# Visit /super-admin/setup-profile?email=YOUR_EMAIL once to create the row.
+# This route is only accessible when NOT already logged in as super_admin.
+
+@super_admin_bp.route("/setup-profile")
+def setup_profile():
+    """
+    One-time helper: creates a user_profiles row for an existing Supabase Auth
+    super_admin user so they can log in through the app.
+    Usage: /super-admin/setup-profile?email=you@example.com
+    """
+    email = request.args.get("email", "").strip().lower()
+    if not email:
+        return jsonify({"error": "Pass ?email=your@email.com"}), 400
+
+    db = get_service_client()
+
+    # Check if profile already exists
+    existing = db.table("user_profiles").select("id, role").eq("email", email).execute().data
+    if existing:
+        return jsonify({
+            "status": "already_exists",
+            "id": existing[0]["id"],
+            "role": existing[0]["role"]
+        })
+
+    # Look up the auth user by email using admin API
+    try:
+        users_resp = db.auth.admin.list_users()
+        auth_user = next(
+            (u for u in users_resp if getattr(u, "email", "") == email),
+            None
+        )
+        if not auth_user:
+            return jsonify({"error": f"No Supabase Auth user found for {email}"}), 404
+
+        user_id = str(auth_user.id)
+
+        # Insert user_profiles row
+        db.table("user_profiles").insert({
+            "id": user_id,
+            "email": email,
+            "full_name": email.split("@")[0].replace(".", " ").title(),
+            "role": "super_admin",
+            "is_active": True
+        }).execute()
+
+        return jsonify({
+            "status": "created",
+            "id": user_id,
+            "email": email,
+            "role": "super_admin",
+            "message": "Profile created. You can now log in."
+        })
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
 # ── Dashboard ─────────────────────────────────────────────────────────────────
 
 @super_admin_bp.route("/")

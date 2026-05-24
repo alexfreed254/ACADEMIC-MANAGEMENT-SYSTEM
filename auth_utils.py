@@ -171,7 +171,6 @@ def create_student_auth_user(admission_no: str, password: str, email: str, full_
     Returns the user UUID.
     """
     import uuid
-    from supabase import create_client
     
     # Generate UUID for the user
     user_id = str(uuid.uuid4())
