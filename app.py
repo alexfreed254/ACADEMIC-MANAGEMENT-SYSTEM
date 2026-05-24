@@ -74,12 +74,23 @@ def inject_globals():
     from notifications import get_unread_count
     user = current_user()
     unread_count = 0
+    pending_employers = 0
     if user:
         unread_count = get_unread_count(user["id"])
+        # Expose pending employer count for super_admin sidebar badge
+        if user.get("role") == "super_admin":
+            try:
+                from db import get_service_client
+                svc = get_service_client()
+                emp_rows = svc.table("employers").select("is_verified").execute().data or []
+                pending_employers = sum(1 for e in emp_rows if not e.get("is_verified"))
+            except Exception:
+                pass
     return {
         "LOGO_URL": "/static/assets/THIKATTILOGO.jpg",
         "current_user": user,
         "unread_notification_count": unread_count,
+        "pending_employers_count": pending_employers,
     }
 
 # ── Jinja2 filter: convert UTC ISO string → EAT display string ───────────────

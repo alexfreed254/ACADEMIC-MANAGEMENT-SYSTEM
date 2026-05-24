@@ -103,6 +103,12 @@ def login():
             profile = authenticate_staff(email, password)
             
             if profile:
+                # Check if employer is unverified — block login with clear message
+                if profile.pop("_unverified_employer", False):
+                    flash("Your employer account is pending verification by the administrator. "
+                          "You will be notified once approved.", "warning")
+                    return render_template("auth/login.html")
+
                 # Session tokens are already attached by authenticate_staff — no second call needed
                 sb_session = profile.pop("_session", None)
                 

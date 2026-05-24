@@ -96,37 +96,51 @@ def authenticate_staff(email: str, password: str) -> Optional[dict]:
     Staff login: Supabase Auth only.
     Returns User profile dict (with '_session' key holding the Supabase session)
     or None on failure.
+
+    Special rules:
+    - Employers must be verified (employers.is_verified = True) to log in.
+    - All other staff must have is_active = True.
     """
     import logging
     log = logging.getLogger(__name__)
 
     email = email.strip().lower()
-    
+
     try:
-        # First, get the user profile
         svc = get_service_client()
         profile_res = svc.table("user_profiles").select("*").eq("email", email).limit(1).execute()
-        
-        if not profile_res.data or len(profile_res.data) == 0:
+
+        if not profile_res.data:
             return None
-            
+
         profile = profile_res.data[0]
-        
+
         if profile["role"] not in STAFF_ROLES:
             return None
 
-        # Authenticate via Supabase Auth (single call — session returned here)
+        # Block inactive accounts
+        if not profile.get("is_active", False):
+            return None
+
+        # Employers must be verified by super admin before they can log in
+        if profile["role"] == "employer":
+            emp_res = svc.table("employers").select("is_verified").eq("profile_id", profile["id"]).limit(1).execute()
+            if not emp_res.data or not emp_res.data[0].get("is_verified", False):
+                # Return a special sentinel so the login route can show the right message
+                profile["_unverified_employer"] = True
+                return profile
+
+        # Authenticate via Supabase Auth
         client = get_anon_client()
         result = client.auth.sign_in_with_password({
             'email': email,
             'password': password,
         })
-        
+
         if result and result.user and result.session:
-            # Attach session tokens so the login route doesn't need a second call
             profile["_session"] = result.session
             return profile
-            
+
         return None
     except Exception as exc:
         err = str(exc).lower()

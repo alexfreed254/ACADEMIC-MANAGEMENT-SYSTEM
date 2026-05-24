@@ -82,7 +82,8 @@ def register():
             }).execute()
             
             write_audit_log("employer_register", target=f"user:{user_id}")
-            flash("Employer account created! You can now log in.", "success")
+            flash("Registration submitted! Your account is pending verification by the administrator. "
+                  "You will receive login access once approved.", "info")
             return redirect(url_for("auth.login"))
             
         except Exception as e:

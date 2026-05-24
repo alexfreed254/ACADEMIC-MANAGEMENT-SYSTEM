@@ -95,12 +95,24 @@ tr:last-child td{border-bottom:none}
       <div class="stat-icon" style="background:linear-gradient(135deg,#006064,#00838f)"><i class="fas fa-clipboard-check"></i></div>
       <div class="stat-info"><h3>Clearances</h3><p>{{ stats.get('clearances',0) }}</p></div>
     </div>
+    <div class="stat-card" style="{% if stats.get('pending_employers',0) > 0 %}border:2px solid #c62828;{% endif %}">
+      <div class="stat-icon" style="background:linear-gradient(135deg,#c62828,#b71c1c)"><i class="fas fa-building"></i></div>
+      <div class="stat-info">
+        <h3>Pending Employers</h3>
+        <p style="{% if stats.get('pending_employers',0) > 0 %}color:#c62828{% endif %}">{{ stats.get('pending_employers',0) }}</p>
+      </div>
+    </div>
   </div>
 
   <!-- ── Quick Actions ── -->
   <p class="section-title"><i class="fas fa-bolt"></i> Quick Actions</p>
   <div class="card" style="margin-bottom:24px">
     <div class="quick-actions">
+      <a href="/super-admin/employers?status=pending" class="qa-btn" style="{% if stats.get('pending_employers',0) > 0 %}border-color:#c62828;background:#fff5f5;{% endif %}">
+        <i class="fas fa-building" style="{% if stats.get('pending_employers',0) > 0 %}color:#c62828{% endif %}"></i>
+        Verify Employers
+        {% if stats.get('pending_employers',0) > 0 %}<span style="background:#c62828;color:#fff;border-radius:20px;padding:1px 7px;font-size:10px">{{ stats.get('pending_employers',0) }}</span>{% endif %}
+      </a>
       <a href="/super-admin/users" class="qa-btn"><i class="fas fa-user-plus"></i> Add User</a>
       <a href="/super-admin/departments" class="qa-btn"><i class="fas fa-sitemap"></i> Departments</a>
       <a href="/super-admin/courses" class="qa-btn"><i class="fas fa-graduation-cap"></i> Courses</a>

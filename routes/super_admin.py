@@ -190,6 +190,10 @@ def dashboard():
             .order("created_at", desc=True).limit(10).execute().data or []
         )
 
+        # ── Pending employer count (for sidebar badge) ────────────────────────
+        all_emp = db.table("employers").select("is_verified").execute().data or []
+        stats['pending_employers'] = sum(1 for e in all_emp if not e.get("is_verified"))
+
     except Exception as e:
         flash(f'Error loading dashboard: {e}', 'danger')
 
@@ -659,6 +663,68 @@ def job_applications():
     apps = query.execute().data or []
     return render_template("super_admin/job_applications.html",
                            apps=apps, status_filter=status_filter)
+
+
+# ── Employer Verification Management ──────────────────────────────────────────
+
+@super_admin_bp.route("/employers")
+@super_admin_required
+def employers():
+    """List all employer accounts with verify/reject controls."""
+    db = _svc()
+    status_filter = request.args.get("status", "pending")  # pending | verified | all
+
+    employers_list = db.table("employers").select(
+        "*, user_profiles!employers_profile_id_fkey(full_name, email, is_active, created_at)"
+    ).order("created_at", desc=True).execute().data or []
+
+    if status_filter == "pending":
+        employers_list = [e for e in employers_list if not e.get("is_verified")]
+    elif status_filter == "verified":
+        employers_list = [e for e in employers_list if e.get("is_verified")]
+
+    pending_count = sum(1 for e in db.table("employers").select("is_verified").execute().data or [] if not e.get("is_verified"))
+
+    return render_template("super_admin/employers.html",
+                           employers=employers_list,
+                           status_filter=status_filter,
+                           pending_count=pending_count)
+
+
+@super_admin_bp.route("/employers/<employer_id>/verify", methods=["POST"])
+@super_admin_required
+def verify_employer(employer_id):
+    """Approve an employer account — grants login access."""
+    db = _svc()
+    try:
+        db.table("employers").update({"is_verified": True, "is_active": True}).eq("id", employer_id).execute()
+        # Also ensure user_profiles is_active = True
+        emp = db.table("employers").select("profile_id").eq("id", employer_id).single().execute().data
+        if emp:
+            db.table("user_profiles").update({"is_active": True}).eq("id", emp["profile_id"]).execute()
+        write_audit_log("verify_employer", target=f"employer:{employer_id}")
+        flash("Employer verified. They can now log in.", "success")
+    except Exception as exc:
+        flash(f"Error: {exc}", "danger")
+    return redirect(url_for("super_admin.employers"))
+
+
+@super_admin_bp.route("/employers/<employer_id>/reject", methods=["POST"])
+@super_admin_required
+def reject_employer(employer_id):
+    """Reject/deactivate an employer account."""
+    db = _svc()
+    reason = request.form.get("reason", "")
+    try:
+        db.table("employers").update({"is_verified": False, "is_active": False}).eq("id", employer_id).execute()
+        emp = db.table("employers").select("profile_id").eq("id", employer_id).single().execute().data
+        if emp:
+            db.table("user_profiles").update({"is_active": False}).eq("id", emp["profile_id"]).execute()
+        write_audit_log("reject_employer", target=f"employer:{employer_id}", detail={"reason": reason})
+        flash("Employer account rejected and deactivated.", "warning")
+    except Exception as exc:
+        flash(f"Error: {exc}", "danger")
+    return redirect(url_for("super_admin.employers"))
 
 
 # ── Employer Verifications ─────────────────────────────────────────────────────

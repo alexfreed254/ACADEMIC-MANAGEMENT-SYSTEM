@@ -46,10 +46,26 @@
       <div class="menu-section">User Management</div>
       <a href="/super-admin/users"><i class="fas fa-users fa-fw"></i> All Users</a>
       <a href="/super-admin/users?role=super_admin"><i class="fas fa-shield-alt fa-fw"></i> Super Admins</a>
-      <a href="/super-admin/users?role=dept_admin"><i class="fas fa-user-tie fa-fw"></i> Dept Admins</a>
+      <a href="/super-admin/users?role=dept_admin"><i class="fas fa-user-tie fa-fw"></i> Dept Admins / HODs</a>
       <a href="/super-admin/users?role=trainer"><i class="fas fa-chalkboard-teacher fa-fw"></i> Trainers</a>
       <a href="/super-admin/users?role=student"><i class="fas fa-user-graduate fa-fw"></i> Students</a>
-      <a href="/super-admin/users?role=employer"><i class="fas fa-building fa-fw"></i> Employers</a>
+      <a href="/super-admin/users?role=registrar"><i class="fas fa-id-card fa-fw"></i> Registrar</a>
+      <a href="/super-admin/users?role=deputy_principal"><i class="fas fa-user-shield fa-fw"></i> Deputy Principal</a>
+      <a href="/super-admin/users?role=examination_officer"><i class="fas fa-file-signature fa-fw"></i> Exam Officer</a>
+      <a href="/super-admin/users?role=quality_assurance_officer"><i class="fas fa-clipboard-check fa-fw"></i> QA Officer</a>
+
+      <div class="menu-section">Employer Portal</div>
+      <a href="/super-admin/employers?status=pending" id="pendingEmployersLink">
+        <i class="fas fa-building fa-fw"></i> Employer Accounts
+        {% if pending_employers_count > 0 %}
+        <span style="margin-left:auto;background:#c62828;color:#fff;border-radius:20px;padding:1px 8px;font-size:10px;font-weight:700">
+          {{ pending_employers_count }}
+        </span>
+        {% endif %}
+      </a>
+      <a href="/super-admin/job-postings"><i class="fas fa-briefcase fa-fw"></i> Job Postings</a>
+      <a href="/super-admin/job-applications"><i class="fas fa-paper-plane fa-fw"></i> Applications</a>
+      <a href="/super-admin/employer-verifications"><i class="fas fa-certificate fa-fw"></i> Verifications</a>
 
       <div class="menu-section">Academic Structure</div>
       <a href="/super-admin/departments"><i class="fas fa-sitemap fa-fw"></i> Departments</a>
@@ -65,11 +81,6 @@
       <a href="/super-admin/assessments"><i class="fas fa-file-alt fa-fw"></i> All Assessments</a>
       <a href="/super-admin/assessments?status=pending"><i class="fas fa-clock fa-fw"></i> Pending Review</a>
       <a href="/super-admin/marks"><i class="fas fa-chart-line fa-fw"></i> Marks &amp; Results</a>
-
-      <div class="menu-section">Job Portal</div>
-      <a href="/super-admin/job-postings"><i class="fas fa-briefcase fa-fw"></i> Job Postings</a>
-      <a href="/super-admin/job-applications"><i class="fas fa-paper-plane fa-fw"></i> Applications</a>
-      <a href="/super-admin/employer-verifications"><i class="fas fa-certificate fa-fw"></i> Verifications</a>
 
       <div class="menu-section">Clearance &amp; Admission</div>
       <a href="/super-admin/clearances"><i class="fas fa-clipboard-check fa-fw"></i> Clearance Requests</a>
