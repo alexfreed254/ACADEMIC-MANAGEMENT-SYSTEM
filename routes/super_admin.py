@@ -89,70 +89,110 @@ def dashboard():
     stats = {}
     recent_assessments = []
     recent_logs = []
+    recent_jobs = []
+    recent_clearances = []
+    recent_admissions = []
     dept_stats = []
 
     try:
-        # Basic counts
-        stats['departments'] = db.table("departments").select("id", count="exact").execute().count or 0
-        stats['users'] = db.table("user_profiles").select("id", count="exact").execute().count or 0
-        stats['classes'] = db.table("classes").select("id", count="exact").execute().count or 0
-        stats['units'] = db.table("units").select("id", count="exact").execute().count or 0
-        stats['assessments'] = db.table("assessments").select("id", count="exact").execute().count or 0
-        stats['attendance'] = db.table("attendance").select("id", count="exact").execute().count or 0
+        # ── Core counts ──────────────────────────────────────────────────────
+        stats['departments']  = db.table("departments").select("id", count="exact").execute().count or 0
+        stats['classes']      = db.table("classes").select("id", count="exact").execute().count or 0
+        stats['units']        = db.table("units").select("id", count="exact").execute().count or 0
+        stats['attendance']   = db.table("attendance").select("id", count="exact").execute().count or 0
+        stats['assessments']  = db.table("assessments").select("id", count="exact").execute().count or 0
 
-        # Role breakdown
+        # ── Role breakdown ────────────────────────────────────────────────────
         all_users = db.table("user_profiles").select("role").execute().data or []
+        stats['users']       = len(all_users)
         stats['dept_admins'] = sum(1 for u in all_users if u['role'] == 'dept_admin')
-        stats['trainers'] = sum(1 for u in all_users if u['role'] == 'trainer')
-        stats['students'] = sum(1 for u in all_users if u['role'] == 'student')
+        stats['trainers']    = sum(1 for u in all_users if u['role'] == 'trainer')
+        stats['students']    = sum(1 for u in all_users if u['role'] == 'student')
+        stats['employers']   = sum(1 for u in all_users if u['role'] == 'employer')
 
-        # Assessment status breakdown
+        # ── Assessment status breakdown ───────────────────────────────────────
         all_assess = db.table("assessments").select("status").execute().data or []
-        stats['pending'] = sum(1 for a in all_assess if a['status'] == 'pending')
+        stats['pending']  = sum(1 for a in all_assess if a['status'] == 'pending')
         stats['approved'] = sum(1 for a in all_assess if a['status'] == 'approved')
         stats['rejected'] = sum(1 for a in all_assess if a['status'] == 'rejected')
 
-        # Recent assessments
+        # ── Job portal counts ─────────────────────────────────────────────────
+        stats['job_postings']    = db.table("job_postings").select("id", count="exact").execute().count or 0
+        stats['job_applications']= db.table("job_applications").select("id", count="exact").execute().count or 0
+        stats['verifications']   = db.table("employer_verifications").select("id", count="exact").execute().count or 0
+
+        # ── Clearance counts ──────────────────────────────────────────────────
+        all_cl = db.table("clearance_requests").select("status").execute().data or []
+        stats['clearances']           = len(all_cl)
+        stats['clearances_pending']   = sum(1 for c in all_cl if c['status'] in ('pending','in_progress'))
+        stats['clearances_completed'] = sum(1 for c in all_cl if c['status'] == 'completed')
+
+        # ── Admission counts ──────────────────────────────────────────────────
+        all_adm = db.table("admission_requests").select("status").execute().data or []
+        stats['admissions']         = len(all_adm)
+        stats['admissions_pending'] = sum(1 for a in all_adm if a['status'] == 'pending')
+        stats['admissions_approved']= sum(1 for a in all_adm if a['status'] == 'approved')
+
+        # ── Recent assessments ────────────────────────────────────────────────
         recent_assessments = (
             db.table("assessments")
             .select("*, user_profiles!assessments_student_id_fkey(full_name, admission_no), units(name), classes(name)")
-            .order("uploaded_at", desc=True)
-            .limit(10)
-            .execute().data or []
+            .order("uploaded_at", desc=True).limit(8).execute().data or []
         )
 
-        # Department stats — include trainer and student counts per dept
+        # ── Recent job postings ───────────────────────────────────────────────
+        recent_jobs = (
+            db.table("job_postings")
+            .select("*, employers(company_name)")
+            .order("created_at", desc=True).limit(6).execute().data or []
+        )
+
+        # ── Recent clearances ─────────────────────────────────────────────────
+        recent_clearances = (
+            db.table("clearance_requests")
+            .select("*, user_profiles!clearance_requests_student_id_fkey(full_name, admission_no), courses(name)")
+            .order("created_at", desc=True).limit(5).execute().data or []
+        )
+
+        # ── Recent admissions ─────────────────────────────────────────────────
+        recent_admissions = (
+            db.table("admission_requests")
+            .select("*, user_profiles!admission_requests_student_id_fkey(full_name, admission_no), courses(name)")
+            .order("submitted_at", desc=True).limit(5).execute().data or []
+        )
+
+        # ── Department stats ──────────────────────────────────────────────────
         depts = db.table("departments").select("id, name").order("name").execute().data or []
         for d in depts:
             did = d["id"]
             cc = db.table("classes").select("id", count="exact").eq("department_id", did).execute().count or 0
             sc = db.table("user_profiles").select("id", count="exact").eq("department_id", did).eq("role", "student").execute().count or 0
             tc = db.table("user_profiles").select("id", count="exact").eq("department_id", did).eq("role", "trainer").execute().count or 0
-            dept_stats.append({
-                "id": did, "name": d["name"],
-                "class_count": cc, "user_count": sc + tc,
-                "student_count": sc, "trainer_count": tc
-            })
+            dept_stats.append({"id": did, "name": d["name"],
+                               "class_count": cc, "student_count": sc, "trainer_count": tc})
 
-        # Recent logs
+        # ── Recent audit logs ─────────────────────────────────────────────────
         recent_logs = (
             db.table("system_logs")
             .select("*, user_profiles(full_name, role)")
-            .order("created_at", desc=True)
-            .limit(20)
-            .execute().data or []
+            .order("created_at", desc=True).limit(10).execute().data or []
         )
+
     except Exception as e:
         flash(f'Error loading dashboard: {e}', 'danger')
 
     return render_template("super_admin/welcome.html",
                            stats=stats,
+                           # legacy vars kept for welcome.html compat
                            depts_count=stats.get('departments', 0),
                            trainers_count=stats.get('trainers', 0),
                            classes_count=stats.get('classes', 0),
                            students_count=stats.get('students', 0),
                            units_count=stats.get('units', 0),
                            recent_assessments=recent_assessments,
+                           recent_jobs=recent_jobs,
+                           recent_clearances=recent_clearances,
+                           recent_admissions=recent_admissions,
                            recent_logs=recent_logs,
                            dept_stats=dept_stats)
 
@@ -454,5 +494,230 @@ def courses():
 @super_admin_required
 def logs():
     db = _svc()
-    logs_list = db.table("system_logs").select("*, user_profiles(full_name, role)").order("created_at", desc=True).limit(100).execute().data or []
+    logs_list = db.table("system_logs").select("*, user_profiles(full_name, role)").order("created_at", desc=True).limit(200).execute().data or []
     return render_template("super_admin/system_logs.html", logs=logs_list)
+
+
+# ── Attendance Overview ────────────────────────────────────────────────────────
+
+@super_admin_bp.route("/attendance")
+@super_admin_required
+def attendance():
+    db = _svc()
+    dept_filter  = request.args.get("department", "")
+    class_filter = request.args.get("class_id", "")
+
+    records = db.table("attendance").select(
+        "*, user_profiles!attendance_student_id_fkey(full_name, admission_no), "
+        "units(name, code), classes(name, department_id)"
+    ).order("attendance_date", desc=True).limit(300).execute().data or []
+
+    if dept_filter:
+        records = [r for r in records if r.get("classes", {}).get("department_id") == dept_filter]
+    if class_filter:
+        records = [r for r in records if str(r.get("unit_id","")) == class_filter or True]
+
+    departments = db.table("departments").select("id, name").order("name").execute().data or []
+    classes     = db.table("classes").select("id, name").order("name").execute().data or []
+
+    return render_template("super_admin/attendance.html",
+                           records=records, departments=departments,
+                           classes=classes, dept_filter=dept_filter,
+                           class_filter=class_filter)
+
+
+# ── Assessments Overview ───────────────────────────────────────────────────────
+
+@super_admin_bp.route("/assessments")
+@super_admin_required
+def assessments():
+    db = _svc()
+    status_filter = request.args.get("status", "")
+    dept_filter   = request.args.get("department", "")
+
+    query = db.table("assessments").select(
+        "*, user_profiles!assessments_student_id_fkey(full_name, admission_no), "
+        "units(name, code, department_id), classes(name)"
+    ).order("uploaded_at", desc=True).limit(300)
+
+    if status_filter:
+        query = query.eq("status", status_filter)
+
+    records = query.execute().data or []
+
+    if dept_filter:
+        records = [r for r in records if r.get("units", {}).get("department_id") == dept_filter]
+
+    departments = db.table("departments").select("id, name").order("name").execute().data or []
+
+    return render_template("super_admin/assessments.html",
+                           assessments=records, departments=departments,
+                           status_filter=status_filter, dept_filter=dept_filter)
+
+
+# ── Marks Overview ─────────────────────────────────────────────────────────────
+
+@super_admin_bp.route("/marks")
+@super_admin_required
+def marks():
+    from datetime import datetime as _dt
+    db = _svc()
+    year        = request.args.get("year", str(_dt.now().year))
+    term        = request.args.get("term", "")
+    dept_filter = request.args.get("department", "")
+
+    query = db.table("marks").select(
+        "*, units(name, code, department_id), "
+        "user_profiles!marks_student_id_fkey(full_name, admission_no), "
+        "user_profiles!marks_trainer_id_fkey(full_name), classes(name)"
+    ).eq("year", int(year)).order("created_at", desc=True).limit(500)
+
+    if term:
+        query = query.eq("term", term)
+
+    records = query.execute().data or []
+
+    if dept_filter:
+        records = [r for r in records if r.get("units", {}).get("department_id") == dept_filter]
+
+    departments = db.table("departments").select("id, name").order("name").execute().data or []
+
+    return render_template("super_admin/marks.html",
+                           marks=records, departments=departments,
+                           year=year, term=term, dept_filter=dept_filter)
+
+
+# ── Job Postings ───────────────────────────────────────────────────────────────
+
+@super_admin_bp.route("/job-postings")
+@super_admin_required
+def job_postings():
+    db = _svc()
+    jobs = db.table("job_postings").select(
+        "*, employers(company_name, official_email)"
+    ).order("created_at", desc=True).execute().data or []
+    return render_template("super_admin/job_postings.html", jobs=jobs)
+
+
+@super_admin_bp.route("/job-postings/<job_id>/toggle", methods=["POST"])
+@super_admin_required
+def toggle_job(job_id):
+    db = _svc()
+    row = db.table("job_postings").select("is_active").eq("id", job_id).single().execute().data
+    if row:
+        db.table("job_postings").update({"is_active": not row["is_active"]}).eq("id", job_id).execute()
+        write_audit_log("toggle_job_posting", target=f"job:{job_id}")
+        flash("Job posting updated.", "success")
+    return redirect(url_for("super_admin.job_postings"))
+
+
+@super_admin_bp.route("/job-postings/<job_id>/delete", methods=["POST"])
+@super_admin_required
+def delete_job(job_id):
+    db = _svc()
+    db.table("job_postings").delete().eq("id", job_id).execute()
+    write_audit_log("delete_job_posting", target=f"job:{job_id}")
+    flash("Job posting deleted.", "success")
+    return redirect(url_for("super_admin.job_postings"))
+
+
+# ── Job Applications ───────────────────────────────────────────────────────────
+
+@super_admin_bp.route("/job-applications")
+@super_admin_required
+def job_applications():
+    db = _svc()
+    status_filter = request.args.get("status", "")
+    query = db.table("job_applications").select(
+        "*, job_postings(title, type, employers(company_name)), "
+        "user_profiles!job_applications_student_id_fkey(full_name, admission_no)"
+    ).order("applied_at", desc=True).limit(300)
+    if status_filter:
+        query = query.eq("status", status_filter)
+    apps = query.execute().data or []
+    return render_template("super_admin/job_applications.html",
+                           apps=apps, status_filter=status_filter)
+
+
+# ── Employer Verifications ─────────────────────────────────────────────────────
+
+@super_admin_bp.route("/employer-verifications")
+@super_admin_required
+def employer_verifications():
+    db = _svc()
+    records = db.table("employer_verifications").select(
+        "*, user_profiles!employer_verifications_trainee_id_fkey(full_name, admission_no), "
+        "employers(company_name)"
+    ).order("submitted_at", desc=True).execute().data or []
+    return render_template("super_admin/employer_verifications.html", records=records)
+
+
+# ── Clearance Requests ─────────────────────────────────────────────────────────
+
+@super_admin_bp.route("/clearances")
+@super_admin_required
+def clearances():
+    db = _svc()
+    status_filter = request.args.get("status", "")
+    query = db.table("clearance_requests").select(
+        "*, user_profiles!clearance_requests_student_id_fkey(full_name, admission_no), "
+        "courses(name, code), departments(name)"
+    ).order("created_at", desc=True).limit(300)
+    if status_filter:
+        query = query.eq("status", status_filter)
+    records = query.execute().data or []
+    return render_template("super_admin/clearances.html",
+                           clearances=records, status_filter=status_filter)
+
+
+# ── Admission Requests ─────────────────────────────────────────────────────────
+
+@super_admin_bp.route("/admissions")
+@super_admin_required
+def admissions():
+    db = _svc()
+    status_filter = request.args.get("status", "")
+    dept_filter   = request.args.get("department", "")
+    query = db.table("admission_requests").select(
+        "*, user_profiles!admission_requests_student_id_fkey(full_name, admission_no, email), "
+        "courses(name, code), departments(name)"
+    ).order("submitted_at", desc=True).limit(300)
+    if status_filter:
+        query = query.eq("status", status_filter)
+    if dept_filter:
+        query = query.eq("department_id", dept_filter)
+    records = query.execute().data or []
+    departments = db.table("departments").select("id, name").order("name").execute().data or []
+    return render_template("super_admin/admissions.html",
+                           admissions=records, departments=departments,
+                           status_filter=status_filter, dept_filter=dept_filter)
+
+
+# ── Industry Partners (Companies) ─────────────────────────────────────────────
+
+@super_admin_bp.route("/companies")
+@super_admin_required
+def companies():
+    db = _svc()
+    records = db.table("companies").select("*, departments(name)").order("name").execute().data or []
+    departments = db.table("departments").select("id, name").order("name").execute().data or []
+    return render_template("super_admin/companies.html",
+                           companies=records, departments=departments)
+
+
+# ── Industrial Attachments ─────────────────────────────────────────────────────
+
+@super_admin_bp.route("/attachments")
+@super_admin_required
+def attachments():
+    db = _svc()
+    status_filter = request.args.get("status", "")
+    query = db.table("industrial_attachments").select(
+        "*, user_profiles!industrial_attachments_student_id_fkey(full_name, admission_no), "
+        "companies(name), units(name, code)"
+    ).order("created_at", desc=True).limit(300)
+    if status_filter:
+        query = query.eq("status", status_filter)
+    records = query.execute().data or []
+    return render_template("super_admin/attachments.html",
+                           attachments=records, status_filter=status_filter)
