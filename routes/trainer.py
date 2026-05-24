@@ -511,23 +511,43 @@ def upload_marks():
         return redirect(url_for("trainer.marks_import"))
     
     try:
-        import pandas as pd
+        import openpyxl
         
-        # Read Excel file
-        df = pd.read_excel(file)
+        # Read Excel file using openpyxl (no pandas needed)
+        wb = openpyxl.load_workbook(file, read_only=True, data_only=True)
+        ws = wb.active
         
-        # Expected columns: admission_no, marks, remarks
-        required_columns = ['admission_no', 'marks']
-        for col in required_columns:
-            if col not in df.columns:
-                flash(f"Missing required column: {col}", "error")
-                return redirect(url_for("trainer.marks_import"))
+        # Read header row to find column positions
+        headers = [str(cell.value).strip().lower() if cell.value else "" for cell in next(ws.iter_rows(min_row=1, max_row=1))]
         
-        # Process each row
-        for _, row in df.iterrows():
-            admission_no = str(row['admission_no']).strip()
-            marks_obtained = float(row['marks'])
-            remarks = str(row.get('remarks', '')) if 'remarks' in row else ""
+        if "admission_no" not in headers:
+            flash("Missing required column: admission_no", "error")
+            return redirect(url_for("trainer.marks_import"))
+        if "marks" not in headers:
+            flash("Missing required column: marks", "error")
+            return redirect(url_for("trainer.marks_import"))
+        
+        adm_idx   = headers.index("admission_no")
+        marks_idx = headers.index("marks")
+        rem_idx   = headers.index("remarks") if "remarks" in headers else None
+        
+        processed = 0
+        # Process data rows (skip header row 1)
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            if not row or row[adm_idx] is None:
+                continue
+            
+            admission_no   = str(row[adm_idx]).strip()
+            marks_obtained = row[marks_idx]
+            remarks        = str(row[rem_idx]).strip() if rem_idx is not None and row[rem_idx] else ""
+            
+            if not admission_no or marks_obtained is None:
+                continue
+            
+            try:
+                marks_obtained = float(marks_obtained)
+            except (ValueError, TypeError):
+                continue
             
             # Get student by admission number
             student = (db.table("user_profiles")
@@ -565,14 +585,15 @@ def upload_marks():
                 }
                 
                 if existing:
-                    # Update existing marks
                     db.table("marks").update(mark_data).eq("id", existing[0]["id"]).execute()
                 else:
-                    # Insert new marks
                     db.table("marks").insert(mark_data).execute()
+                
+                processed += 1
         
+        wb.close()
         write_audit_log("import_marks", target=f"class:{class_id},unit:{unit_id}")
-        flash(f"Marks imported successfully. Processed {len(df)} records.", "success")
+        flash(f"Marks imported successfully. Processed {processed} records.", "success")
     except Exception as e:
         flash(f"Error importing marks: {e}", "error")
     
