@@ -75,6 +75,7 @@ def login():
 
     if request.method == "POST":
         login_type = request.form.get("login_type")  # "staff" or "student"
+        origin = request.form.get("origin", "")
         
         if login_type == "staff":
             email = request.form.get("email", "").strip()
@@ -82,6 +83,8 @@ def login():
             
             if not email or not password:
                 flash("Email and password are required", "error")
+                if origin == "employer":
+                    return render_template("employer/login.html")
                 return render_template("auth/login.html")
             
             profile = authenticate_staff(email, password)
@@ -110,11 +113,15 @@ def login():
                         return redirect(url_for("dept_admin.dashboard"))
                     elif role == "trainer":
                         return redirect(url_for("trainer.dashboard"))
+                    elif role == "employer":
+                        return redirect(url_for("employer.dashboard"))
                     
                     flash("Login successful", "success")
                     return redirect(url_for("main.index"))
             
             flash("Invalid email or password", "error")
+            if origin == "employer":
+                return render_template("employer/login.html")
             
         elif login_type == "student":
             admission_no = request.form.get("admission_no", "").strip()

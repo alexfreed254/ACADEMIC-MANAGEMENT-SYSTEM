@@ -95,6 +95,13 @@ def register():
     return render_template("employer/register.html", form_data={})
 
 
+@employer_bp.route("/login")
+def login():
+    if current_user() and current_user().get("role") == "employer":
+        return redirect(url_for("employer.dashboard"))
+    return render_template("employer/login.html")
+
+
 # ── Employer Dashboard ───────────────────────────────────────────────────────
 
 @employer_bp.route("/dashboard")
