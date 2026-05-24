@@ -129,3 +129,4 @@ gunicorn app:app
 - Session cookies are `HttpOnly`, `Secure`, `SameSite=None`
 - JWT tokens are refreshed automatically before expiry
 - File uploads are stored in Supabase Storage with public access policies
+# ACADEMIC-MANAGEMENT-SYSTEM
