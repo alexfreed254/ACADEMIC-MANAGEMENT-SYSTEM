@@ -305,14 +305,12 @@
     <section class="login-panel">
       <div class="top">
         <div class="tabs">
-          <button type="button" class="tab {% if request.form.get('login_type', 'staff') == 'staff' and request.form.get('origin') != 'employer' %}active{% endif %}" data-type="staff">Staff / Admin</button>
+          <button type="button" class="tab {% if request.form.get('login_type', 'staff') == 'staff' and request.form.get('origin') != 'employer' %}active{% endif %}" data-type="staff">Staff / Trainer</button>
           <button type="button" class="tab {% if request.form.get('login_type') == 'student' %}active{% endif %}" data-type="student">Trainee</button>
           <button type="button" class="tab {% if request.form.get('origin') == 'employer' %}active{% endif %}" data-type="employer">Employer</button>
         </div>
         <h2>Welcome back</h2>
-        <p>Sign in to your account to continue.</p>
-      </div>
-
+        <p>Staff and trainers sign in with your personal or institute email address and password.</p>
       {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         {% for category, message in messages %}
@@ -326,13 +324,21 @@
 
       <form method="post" action="/auth/login" class="form" id="loginForm">
         <input type="hidden" name="login_type" id="loginType" value="{{ request.form.get('login_type', 'staff') }}">
-        <input type="hidden" name="origin" value="auth">
+        <input type="hidden" name="origin" id="origin" value="auth">
 
-        <div class="field" id="staffField" style="{% if request.form.get('login_type') == 'student' %}display:none;{% endif %}">
-          <label for="email">Email Address</label>
+        <div class="field" id="staffField" style="{% if request.form.get('login_type') == 'student' or request.form.get('origin') == 'employer' %}display:none;{% endif %}">
+          <label for="email">Personal / Institute Email</label>
           <div class="input-wrap">
             <i class="fas fa-envelope"></i>
-            <input id="email" type="email" name="email" placeholder="you@company.com" value="{{ request.form.get('email', '') }}" autocomplete="email">
+            <input id="email" type="email" name="email" placeholder="your.email@example.com" value="{{ request.form.get('email', '') }}" autocomplete="email">
+          </div>
+        </div>
+
+        <div class="field" id="employerField" style="{% if request.form.get('origin') == 'employer' %}display:grid;{% else %}display:none;{% endif %}">
+          <label for="employerEmail">Employer Email</label>
+          <div class="input-wrap">
+            <i class="fas fa-building"></i>
+            <input id="employerEmail" type="email" name="email" placeholder="employer@company.com" value="{{ request.form.get('email', '') }}" autocomplete="email">
           </div>
         </div>
 
