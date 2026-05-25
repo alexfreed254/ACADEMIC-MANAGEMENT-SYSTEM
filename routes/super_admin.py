@@ -541,7 +541,7 @@ def attendance():
     if dept_filter:
         records = [r for r in records if r.get("classes", {}).get("department_id") == dept_filter]
     if class_filter:
-        records = [r for r in records if str(r.get("unit_id","")) == class_filter or True]
+        records = [r for r in records if r.get("class_id") == class_filter]
 
     departments = db.table("departments").select("id, name").order("name").execute().data or []
     classes     = db.table("classes").select("id, name").order("name").execute().data or []

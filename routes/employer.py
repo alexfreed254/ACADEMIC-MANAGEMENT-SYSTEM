@@ -7,6 +7,7 @@ Employer portal for job postings, applications, and trainee verifications.
 from flask import (Blueprint, render_template, request,
                    redirect, url_for, flash, abort)
 from auth_utils import (employer_required, write_audit_log, current_user)
+from notifications import get_user_notifications
 from db import get_service_client
 from datetime import datetime
 
@@ -113,22 +114,31 @@ def dashboard():
     employer = _employer_row()
     employer_id = employer["id"]
 
+    unread_notifications = []
     try:
-        my_verifications = db.table("employer_verifications").select(
-            "*, user_profiles(full_name, admission_no), departments(name), courses(name)"
-        ).eq("employer_id", employer_id).order("submitted_at", desc=True).execute().data or []
+        # Statistics - Calculated efficiently at DB level
+        stats = {}
+        stats["total"]    = db.table("employer_verifications").select("id", count="exact").eq("employer_id", employer_id).execute().count or 0
+        stats["approved"] = db.table("employer_verifications").select("id", count="exact").eq("employer_id", employer_id).eq("status", "approved").execute().count or 0
+        stats["pending"]  = db.table("employer_verifications").select("id", count="exact").eq("employer_id", employer_id).eq("status", "pending").execute().count or 0
+        stats["jobs"]     = db.table("job_postings").select("id", count="exact").eq("employer_id", employer_id).execute().count or 0
 
-        stats = {
-            "total": len(my_verifications),
-            "approved": len([v for v in my_verifications if v["status"] == "approved"]),
-            "pending": len([v for v in my_verifications if v["status"] == "pending"]),
-        }
+        # Fetch unread notifications for the profile_id (user_id)
+        unread_notifications = get_user_notifications(user["id"], unread_only=True, limit=3)
+
+        # Recent Verifications (limited to 10 for dashboard performance)
+        my_verifications = (db.table("employer_verifications")
+            .select("*, user_profiles!employer_verifications_trainee_id_fkey(full_name, admission_no), departments(name), courses(name)")
+            .eq("employer_id", employer_id)
+            .order("submitted_at", desc=True)
+            .limit(10).execute().data or [])
 
         my_jobs = db.table("job_postings").select("*").eq(
             "employer_id", employer_id
         ).order("created_at", desc=True).limit(5).execute().data or []
 
-    except Exception:
+    except Exception as e:
+        flash(f"Error loading dashboard: {e}", "danger")
         my_verifications = []
         stats = {"total": 0, "approved": 0, "pending": 0}
         my_jobs = []
@@ -138,7 +148,8 @@ def dashboard():
                           employer=employer,
                           verifications=my_verifications,
                           stats=stats,
-                          jobs=my_jobs)
+                          jobs=my_jobs,
+                          unread_notifications=unread_notifications)
 
 
 # ── Job Postings Management ───────────────────────────────────────────────────
@@ -373,7 +384,7 @@ def recommend(student_id):
 
     try:
         rows = db.table("user_profiles").select(
-            "*, departments(*), courses(*)"
+            "*, departments(name), courses(name)"
         ).eq("id", student_id).eq("role", "student").execute().data or []
         student = rows[0] if rows else None
     except Exception:

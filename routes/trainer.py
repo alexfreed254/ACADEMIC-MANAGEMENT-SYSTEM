@@ -58,9 +58,12 @@ def _rename_script_file(db, assessment_id: str, action: str, trainer_name: str):
         # Strip any previous approval/rejection suffix
         original = re.sub(r'\s*[—–-]+\s*(approved|rejected) by .+$', '', original, flags=re.IGNORECASE)
         # Remove .pdf extension, append suffix, re-add extension
-        base = original[:-4] if original.lower().endswith('.pdf') else original
-        suffix = f" — {action} by {trainer_name} — {trainee_name}"
-        new_name = base + suffix + ".pdf"
+        if original.lower().endswith('.pdf'):
+            base = original[:-4]
+        else:
+            base = original
+        suffix = f" — {action} by {trainer_name} — {trainee_name}.pdf"
+        new_name = base + suffix
         db.table("assessments").update({"script_file_name": new_name}).eq("id", assessment_id).execute()
     except Exception:
         pass

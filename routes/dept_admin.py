@@ -8,6 +8,7 @@ from flask import (Blueprint, render_template, request,
 from auth_utils import (dept_admin_required, write_audit_log,
                         current_user, dept_isolation_check)
 from db import get_service_client
+from notifications import get_user_notifications
 from datetime import datetime
 import secrets, string
 
@@ -40,6 +41,7 @@ def dashboard():
     dept_id = _dept_id()
     dept = db.table("departments").select("*").eq("id", dept_id).single().execute().data or {}
     stats = {}
+    unread_notifications = []
     recent_assessments = []
     recent_attendance = []
     units_list = []
@@ -48,20 +50,29 @@ def dashboard():
         stats["trainers"]    = db.table("user_profiles").select("id", count="exact").eq("role", "trainer").eq("department_id", dept_id).execute().count or 0
         stats["students"]    = db.table("user_profiles").select("id", count="exact").eq("role", "student").eq("department_id", dept_id).execute().count or 0
         stats["units"]       = db.table("units").select("id", count="exact").eq("department_id", dept_id).execute().count or 0
-        all_a = db.table("assessments").select("status, units(department_id)").execute().data or []
-        dept_assessments = [a for a in all_a if a.get("units", {}).get("department_id") == dept_id]
+        
+        # Fetch unread notifications
+        unread_notifications = get_user_notifications(current_user()["id"], unread_only=True, limit=3)
+
+        # Assessments stats filtered by department units at DB level
+        dept_assessments = db.table("assessments").select("status, units!inner(department_id)").eq("units.department_id", dept_id).execute().data or []
         stats["assessments"] = len(dept_assessments)
         stats["pending"]     = sum(1 for a in dept_assessments if a["status"] == "pending")
         stats["approved"]    = sum(1 for a in dept_assessments if a["status"] == "approved")
         stats["rejected"]    = sum(1 for a in dept_assessments if a["status"] == "rejected")
+
+        # Recent assessments specifically for this department
         recent_assessments = (db.table("assessments")
-            .select("*, user_profiles!assessments_student_id_fkey(full_name, admission_no), units(name, department_id), classes(name)")
+            .select("*, user_profiles!assessments_student_id_fkey(full_name, admission_no), units!inner(name, department_id), classes(name)")
+            .eq("units.department_id", dept_id)
             .order("uploaded_at", desc=True).limit(8).execute().data or [])
-        recent_assessments = [a for a in recent_assessments if a.get("units", {}).get("department_id") == dept_id]
+
+        # Recent attendance specifically for this department
         recent_attendance = (db.table("attendance")
-            .select("*, user_profiles!attendance_student_id_fkey(full_name, admission_no), units(name, code, department_id), classes(name)")
+            .select("*, user_profiles!attendance_student_id_fkey(full_name, admission_no), units!inner(name, code, department_id), classes(name)")
+            .eq("units.department_id", dept_id)
             .order("attendance_date", desc=True).limit(10).execute().data or [])
-        recent_attendance = [a for a in recent_attendance if a.get("units", {}).get("department_id") == dept_id]
+            
         units_list = db.table("units").select("id, name, code").eq("department_id", dept_id).order("name").execute().data or []
     except Exception as e:
         flash(f"Error loading dashboard: {e}", "danger")
@@ -69,7 +80,8 @@ def dashboard():
                            dept=dept, stats=stats,
                            recent_assessments=recent_assessments,
                            recent_attendance=recent_attendance,
-                           units_list=units_list)
+                           units_list=units_list,
+                           unread_notifications=unread_notifications)
 
 
 # ── Welcome alias ─────────────────────────────────────────────────────────────
@@ -289,8 +301,12 @@ def attendance():
         .select("*, user_profiles!attendance_student_id_fkey(full_name, admission_no), units(name, code, department_id), classes(name)")
         .order("attendance_date", desc=True).limit(200).execute().data or [])
     records = [r for r in records if r.get("units", {}).get("department_id") == dept_id]
+
     if class_filter:
-        records = [r for r in records if r.get("classes", {}).get("name") and True]
+        records = [r for r in records if r.get("class_id") == class_filter]
+    if unit_filter:
+        records = [r for r in records if r.get("unit_id") == unit_filter]
+
     classes = db.table("classes").select("id, name").eq("department_id", dept_id).order("name").execute().data or []
     units   = db.table("units").select("id, name, code").eq("department_id", dept_id).order("name").execute().data or []
     return render_template("dept_admin/attendance.html",
